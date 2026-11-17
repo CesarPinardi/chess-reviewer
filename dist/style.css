@@ -5,9 +5,13 @@ header{height:72px;border-bottom:1px solid var(--line);display:flex;align-items:
 .logo{display:grid;place-items:center;width:38px;height:38px;border-radius:10px;background:var(--green);color:#202818;font-size:29px}
 header button{margin-left:auto}
 main{max-width:1110px;margin:28px auto;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:26px;padding:0 16px}
-.support{max-width:1110px;margin:0 auto;padding:0 16px 24px;display:flex;justify-content:center}
-.support a{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;color:var(--green);font-size:.83rem;font-weight:700;text-decoration:none}
-.support a:hover{background:var(--panel)}
+.support{max-width:1110px;margin:0 auto;padding:0 16px 28px}
+.support-card{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;padding:18px 20px;background:var(--panel);border:1px solid var(--line);border-radius:13px}
+.support h2{margin:0;font-size:1rem}
+.support p{color:var(--muted);font-size:.85rem}
+.support a{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:8px;background:#f3ce80;color:#30230e;font-size:.85rem;font-weight:800;text-decoration:none}
+.support a:hover{background:#ffe0a0}
+@media(max-width:760px){.support{max-width:590px}}
 button,input,textarea{font:inherit}
 button{padding:9px 13px;border:1px solid var(--line);border-radius:8px;background:#303a31;color:inherit;font-size:.83rem;font-weight:700;cursor:pointer}
 button:hover:enabled{filter:brightness(1.18)}

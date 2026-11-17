@@ -1,20 +1,25 @@
-# Chess Reviewer
+<h1 align="center">♞ Chess Reviewer</h1>
+<p align="center">Review your chess games with Stockfish, right in your browser.</p>
 
-[Open Chess Reviewer on GitHub Pages](https://cesarpinardi.github.io/chess-reviewer/)
+<p align="center">
+  <a href="https://cesarpinardi.github.io/chess-reviewer/"><img src="https://img.shields.io/badge/Open%20Chess%20Reviewer-35582B?style=for-the-badge" alt="Open Chess Reviewer"></a>
+  <a href="https://www.paypal.com/donate/?business=JT894TQVB822C&amp;no_recurring=0&amp;currency_code=USD"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-765218?style=for-the-badge&amp;logo=paypal&amp;logoColor=white" alt="Buy me a coffee on PayPal"></a>
+</p>
 
-[☕ Buy me a coffee](https://www.paypal.com/donate/?business=JT894TQVB822C&no_recurring=0&currency_code=USD)
+## What you can do
 
-Review a chess game with Stockfish in your browser. Paste a PGN or open a `.pgn` file to see the evaluation graph, move classifications, and a summary for both sides. Click a mistake or blunder to see the opponent's suggested reply, or select **Show best move** to compare it with what you played.
+- **Find turning points.** Follow the evaluation graph, jump to the next mistake, and see the reply Stockfish recommends.
+- **Compare moves.** See the suggested alternative on the board, then use **Try moves** to play your own variation.
+- **Review both sides.** The game summary counts best moves, inaccuracies, mistakes, and the other move classifications for White and Black.
 
-## How to use it
+## Review your first game
 
-1. After a Chess.com game, open **Share → PGN** and copy the PGN or download it.
-2. In Chess Reviewer, click **Import PGN**, paste the text or select the file, then click **Load game**.
-3. Click **Analyze game**. You can navigate with the move list, graph, or left and right arrow keys while Stockfish works.
-4. After analysis, review the **Game summary** or click **Next mistake** to jump between critical moves. You can also analyze the sample game without importing anything.
-5. Click **Try moves** to play a variation from the selected position. Choose a piece and a highlighted destination. Click **Back to game** to return to the original move.
+1. In Chess.com, open **Share → PGN** after the game. Copy the PGN or download the file.
+2. In Chess Reviewer, choose **Import PGN**, paste the text or select the file, then click **Load game**.
+3. Click **Analyze game**. Use the move list, graph, or arrow keys to navigate while Stockfish works.
+4. Click **Next mistake** to jump to a turning point. Use **Show best move** to compare, or **Try moves** to play a line yourself. **Back to game** restores the original position.
 
-The PGN contains the full move history. A standalone FEN describes a single position.
+You can also click **Analyze game** on the built-in sample. A PGN contains the full move history. A standalone FEN describes one position.
 
 ## Run locally
 
@@ -24,17 +29,16 @@ With Node.js installed, run this command from the repository root:
 node serve.mjs
 ```
 
-Open [http://127.0.0.1:4173](http://127.0.0.1:4173/). The app and engine are bundled in `dist/` and work offline through the local server.
-
-## Publish on GitHub Pages
-
-In the repository, open **Settings → Pages** and select **GitHub Actions** as the source. The included **Deploy to GitHub Pages** workflow publishes `dist/` on pushes to `main`. You can also run it manually from the **Actions** tab.
+Open [http://127.0.0.1:4173](http://127.0.0.1:4173/). The app and engine are bundled in `dist/` for offline use through the local server.
 
 ## How analysis works
 
-Stockfish 17.1 Lite runs in a dedicated browser worker. Games stay in the browser. Each position is searched up to depth 13 with a 10,000-node budget. The worker stops when analysis finishes or is canceled. The board uses the stored results when you move through the game or show an alternative.
+Stockfish 17.1 Lite runs in a dedicated browser worker, and your PGN stays in your browser. The search uses up to depth 13 and 10,000 nodes per position. The worker stops when analysis finishes or is canceled. The board uses stored results when you navigate or show an alternative.
 
-Move classifications estimate the loss in evaluation for the side that moved. They use this project's thresholds and can differ from Chess.com's classifications. Explanations describe the engine's suggested continuation and observable consequences such as captures or checkmate.
+Move classifications estimate the loss in evaluation for the side that moved. The project uses its own thresholds, so the labels can differ from Chess.com's. Explanations show the suggested continuation and highlight captures or checkmate when present.
 
-Third-party source and license information is in [dist/vendor/sources.txt](dist/vendor/sources.txt).
+## Deployment and credits
 
+The [GitHub Pages workflow](.github/workflows/pages.yml) publishes `dist/` on pushes to `main`. For a fork, select **GitHub Actions** under **Settings → Pages** before running the workflow.
+
+See [third-party sources and licenses](dist/vendor/sources.txt) for Stockfish, chess.js, and the chess pieces.
