@@ -1,5 +1,7 @@
 # Chess Reviewer
 
+[Open Chess Reviewer on GitHub Pages](https://cesarpinardi.github.io/chess-reviewer/)
+
 Review a chess game with Stockfish in your browser. Paste a PGN or open a `.pgn` file to see the evaluation graph, move classifications, and a summary for both sides. Click a mistake or blunder to see the opponent's suggested reply, or select **Show best move** to compare it with what you played.
 
 ## How to use it
