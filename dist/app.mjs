@@ -16,6 +16,7 @@ const board = byId('board');
 const chart = byId('chart');
 const detail = byId('detail');
 const importer = byId('importer');
+const moveMark = byId('move-mark');
 const nav = [...document.querySelectorAll('[data-nav]')];
 let game, moves, positions, moveButtons;
 let selected = 0;
@@ -113,6 +114,19 @@ function squareCoordinates(square) {
   return flipped ? [7 - x, 7 - y] : [x, y];
 }
 
+function showMoveMark(square, review) {
+  moveMark.replaceChildren();
+  if (!square || !review || alternate) return;
+  const [file, rank] = squareCoordinates(square);
+  const icons = { excellent: '👍', good: '✓' };
+  const icon = node('span', icons[review.style] || review.symbol);
+  const badge = node('span', '', 'move-mark ' + review.style);
+  badge.append(icon);
+  moveMark.style.left = `${(file + .8) * 12.5}%`;
+  moveMark.style.top = `${(rank + .21) * 12.5}%`;
+  moveMark.append(badge);
+}
+
 function drawBoard() {
   const review = reviews[selected];
   const position = new Chess(positions[alternate ? selected - 1 : selected]);
@@ -138,6 +152,7 @@ function drawBoard() {
     cell.square = square;
   });
   const arrows = byId('arrows');
+  showMoveMark(last?.to, review);
   arrows.replaceChildren();
   if (alternate && last) {
     const [x, y] = squareCoordinates(last.from);

@@ -25,6 +25,14 @@ button:disabled{opacity:.43;cursor:default}
 .rank,.file{position:absolute;font-size:clamp(8px,1.2vw,13px);font-weight:800;z-index:1}
 .rank{top:2px;left:3px}.file{bottom:1px;right:3px}
 #arrows{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#move-mark{position:absolute;width:5%;aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none;z-index:2}
+.move-mark{display:grid;place-items:center;width:100%;height:100%;border-radius:50%;background:#52762d;color:white;outline:1px solid #fff8;font-size:clamp(9px,2.6vw,17px);font-weight:800;line-height:1;animation:move-mark-in 180ms ease-out both}
+.move-mark.excellent>span{filter:grayscale(1) brightness(0) invert(1)}
+.move-mark.inaccuracy{background:#ebbd55;color:#231907}
+.move-mark.mistake{background:#bd612a}
+.move-mark.blunder{background:#a53334}
+@keyframes move-mark-in{from{transform:scale(.65);opacity:0}to{transform:scale(1);opacity:1}}
+@media(prefers-reduced-motion:reduce){.move-mark{animation:none}}
 .plot,.review{background:var(--panel);border:1px solid var(--line);border-radius:13px;min-width:0}
 .plot{margin-top:8px;padding:12px 14px}
 .plot-title,.moves-title,nav{display:flex;justify-content:space-between;align-items:center;gap:6px}
