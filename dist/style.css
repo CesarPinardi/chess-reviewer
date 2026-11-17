@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#161b18;color:#f0f3eb;--panel:#222a24;--line:#38443b;--muted:#adb9ac;--green:#d2ea91}
 *{box-sizing:border-box}
 body{margin:0}

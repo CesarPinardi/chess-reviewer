@@ -22,9 +22,27 @@ let selected = 0;
 let flipped = false;
 let alternate = false;
 let worker;
+let cancelSearch;
 let run = 0;
 let evaluations = [];
 let reviews = [];
+let analysisFrame = 0;
+const searchNodes = 12000;
+const searchDepth = 13;
+const pieceNames = { k: 'Rei', q: 'Dama', r: 'Torre', b: 'Bispo', n: 'Cavalo', p: 'Peão' };
+const tiles = Array.from({ length: 64 }, (_, index) => {
+  const file = index % 8;
+  const rank = Math.floor(index / 8);
+  const tile = node('div', '', (file + rank) % 2 ? 'square dark' : 'square');
+  const rankLabel = file === 0 ? node('span', '', 'rank') : null;
+  const fileLabel = rank === 7 ? node('span', '', 'file') : null;
+  const image = document.createElement('img');
+  if (rankLabel) tile.append(rankLabel);
+  if (fileLabel) tile.append(fileLabel);
+  tile.append(image);
+  board.append(tile);
+  return { tile, image, rankLabel, fileLabel, file, rank, pieceKey: undefined };
+});
 
 function node(tag, text, className) {
   const element = document.createElement(tag);
@@ -92,24 +110,23 @@ function drawBoard() {
   if (alternate) last = playUci(position, review.best);
   let layout = position.board().flat();
   if (flipped) layout = layout.reverse();
-  board.replaceChildren(...layout.map((piece, index) => {
-    const file = index % 8;
-    const rank = Math.floor(index / 8);
+  layout.forEach((piece, index) => {
+    const cell = tiles[index];
+    const { file, rank, tile, image, rankLabel, fileLabel } = cell;
     const square = `${'abcdefgh'[flipped ? 7 - file : file]}${flipped ? rank + 1 : 8 - rank}`;
-    const tile = node('div', '', 'square');
-    tile.classList.toggle('dark', (file + rank) % 2 === 1);
     tile.classList.toggle('last', square === last?.from || square === last?.to);
-    if (!file) tile.append(node('span', square[1], 'rank'));
-    if (rank === 7) tile.append(node('span', square[0], 'file'));
+    if (rankLabel && rankLabel.textContent !== square[1]) rankLabel.textContent = square[1];
+    if (fileLabel && fileLabel.textContent !== square[0]) fileLabel.textContent = square[0];
+    const pieceKey = piece ? piece.color + piece.type.toUpperCase() : '';
+    if (pieceKey === cell.pieceKey && cell.square === square) return;
+    image.hidden = !piece;
     if (piece) {
-      const image = document.createElement('img');
-      image.src = `pieces/${piece.color}${piece.type.toUpperCase()}.svg`;
-      const names = { k: 'Rei', q: 'Dama', r: 'Torre', b: 'Bispo', n: 'Cavalo', p: 'Peão' };
-      image.alt = `${names[piece.type]} (${piece.color === 'w' ? 'brancas' : 'pretas'}), ${square}`;
-      tile.append(image);
+      if (pieceKey !== cell.pieceKey) image.src = `pieces/${pieceKey}.svg`;
+      image.alt = `${pieceNames[piece.type]} (${piece.color === 'w' ? 'brancas' : 'pretas'}), ${square}`;
     }
-    return tile;
-  }));
+    cell.pieceKey = pieceKey;
+    cell.square = square;
+  });
   const arrows = byId('arrows');
   arrows.replaceChildren();
   if (alternate && last) {
@@ -173,12 +190,15 @@ function renderDetail() {
 
 function drawChart() {
   const scale = window.devicePixelRatio || 1;
-  chart.width = Math.round(chart.clientWidth * scale);
-  chart.height = Math.round(chart.clientHeight * scale);
+  const pixelWidth = Math.round(chart.clientWidth * scale);
+  const pixelHeight = Math.round(chart.clientHeight * scale);
+  if (chart.width !== pixelWidth) chart.width = pixelWidth;
+  if (chart.height !== pixelHeight) chart.height = pixelHeight;
   const ctx = chart.getContext('2d');
-  ctx.scale(scale, scale);
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
   const width = chart.clientWidth;
   const height = chart.clientHeight;
+  ctx.clearRect(0, 0, width, height);
   const x = index => 4 + index * (width - 8) / moves.length;
   const y = value => height / 2 - Math.tanh(value / 400) * (height / 2 - 5);
   ctx.strokeStyle = '#66756a';
@@ -205,9 +225,10 @@ function drawChart() {
 }
 
 function go(index) {
+  moveButtons[selected - 1]?.removeAttribute('aria-current');
   selected = Math.max(0, Math.min(index, moves.length));
   alternate = false;
-  moveButtons.forEach((button, i) => button.setAttribute('aria-current', String(i + 1 === selected)));
+  moveButtons[selected - 1]?.setAttribute('aria-current', 'true');
   moveButtons[selected - 1]?.scrollIntoView({ block: 'nearest', container: 'nearest' });
   nav.forEach((button, i) => button.disabled = i < 2 ? selected === 0 : selected === moves.length);
   drawBoard();
@@ -217,6 +238,9 @@ function go(index) {
 
 function stop() {
   run++;
+  cancelAnimationFrame(analysisFrame);
+  analysisFrame = 0;
+  cancelSearch?.();
   worker?.terminate();
   worker = undefined;
   byId('analyze').textContent = 'Analisar partida';
@@ -229,10 +253,12 @@ function send(engine, commands, complete, parse = () => {}) {
     const timeout = setTimeout(() => finish(new Error('Tempo limite do motor')), 20000);
     const finish = error => {
       clearTimeout(timeout);
+      cancelSearch = undefined;
       engine.onmessage = null;
       engine.onerror = null;
       if (error) reject(error);
     };
+    cancelSearch = () => finish(new Error('Análise interrompida'));
     engine.onerror = () => finish(new Error('Falha ao carregar Stockfish'));
     engine.onmessage = ({ data }) => {
       const line = String(data);
@@ -256,7 +282,7 @@ async function evaluate(engine, index) {
   // Include the played move history so the engine can reason about repetitions.
   const played = moves.slice(0, index).map(move => move.lan).join(' ');
   const command = `position fen ${positions[0]}${played ? ' moves ' + played : ''}`;
-  const best = await send(engine, [command, 'go depth 13'], 'bestmove', line => {
+  const best = await send(engine, [command, `go depth ${searchDepth} nodes ${searchNodes}`], 'bestmove', line => {
     const score = line.match(/\bscore (cp|mate) (-?\d+)/);
     if (!score || /\b(?:upperbound|lowerbound)\b/.test(line)) return;
     const raw = Number(score[2]) * side;
@@ -314,12 +340,19 @@ async function analyze() {
       if (current !== run) return;
       evaluations.push(result);
       if (index) reviews[index] = classify(index);
-      progress.value = index + 1;
-      byId('status').textContent = `Analisando posições · ${index + 1}/${positions.length}`;
-      drawChart();
+      if (!analysisFrame) {
+        analysisFrame = requestAnimationFrame(() => {
+          analysisFrame = 0;
+          progress.value = evaluations.length;
+          byId('status').textContent = `Analisando posições · ${evaluations.length}/${positions.length}`;
+          drawChart();
+        });
+      }
+      // Give the browser and other tabs time between searches.
+      await new Promise(resolve => setTimeout(resolve, 20));
     }
     if (current !== run) return;
-    byId('status').textContent = 'Análise concluída · profundidade 13';
+    byId('status').textContent = 'Análise rápida concluída';
     const firstError = reviews.findIndex(review => review?.loss >= 100);
     if (firstError > 0 && selected === 0) selected = firstError;
   } catch (error) {
