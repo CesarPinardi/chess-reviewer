@@ -1,8 +1,8 @@
 import { Chess } from './vendor/chess.mjs';
 
-const example = `[Event "Partida de exemplo"]
-[White "Brancas"]
-[Black "Pretas"]
+const example = `[Event "Sample game"]
+[White "White"]
+[Black "Black"]
 [Result "1-0"]
 
 1. e4 e5 2. Nf3 Nc6 3. Bb5 Bc5 4. c3 a6 5. Ba4 Nf6 6. d3 h6
@@ -32,14 +32,14 @@ let analysisFrame = 0;
 const searchNodes = 10000;
 const searchDepth = 13;
 const categories = {
-  best: { label: 'Melhor lance', symbol: '★' },
-  excellent: { label: 'Excelente', symbol: '!' },
-  good: { label: 'Bom lance', symbol: '' },
-  inaccuracy: { label: 'Imprecisão', symbol: '?!' },
-  mistake: { label: 'Erro', symbol: '?' },
-  blunder: { label: 'Erro grave', symbol: '??' },
+  best: { label: 'Best move', symbol: '★' },
+  excellent: { label: 'Excellent', symbol: '!' },
+  good: { label: 'Good move', symbol: '' },
+  inaccuracy: { label: 'Inaccuracy', symbol: '?!' },
+  mistake: { label: 'Mistake', symbol: '?' },
+  blunder: { label: 'Blunder', symbol: '??' },
 };
-const pieceNames = { k: 'Rei', q: 'Dama', r: 'Torre', b: 'Bispo', n: 'Cavalo', p: 'Peão' };
+const pieceNames = { k: 'King', q: 'Queen', r: 'Rook', b: 'Bishop', n: 'Knight', p: 'Pawn' };
 const tiles = Array.from({ length: 64 }, (_, index) => {
   const file = index % 8;
   const rank = Math.floor(index / 8);
@@ -66,7 +66,7 @@ function importGame(text, sample = false) {
   const clean = text.replace(/^\uFEFF/, '').replace(/\\(?=[.:/])/g, '').replace(/\\(?=\r?$)/gm, '');
   next.loadPgn(clean.trim());
   const history = next.history({ verbose: true });
-  if (!history.length) throw new Error('PGN sem lances');
+  if (!history.length) throw new Error('The PGN contains no moves');
   stop();
   game = next;
   moves = history;
@@ -75,16 +75,16 @@ function importGame(text, sample = false) {
   reviews = [];
   byId('report').hidden = true;
   flipped = false;
-  byId('game').textContent = sample ? 'Partida de exemplo · 1–0' :
+  byId('game').textContent = sample ? 'Sample game · 1–0' :
     `${player('White')} × ${player('Black')} · ${game.getHeaders().Result || '*'}`;
-  byId('status').textContent = 'Analise a partida para encontrar os lances decisivos.';
+  byId('status').textContent = 'Analyze the game to find the turning points.';
   renderMoves();
   go(0);
 }
 
 function player(color) {
   const headers = game.getHeaders();
-  const name = headers[color] || (color === 'White' ? 'Brancas' : 'Pretas');
+  const name = headers[color] || (color === 'White' ? 'White' : 'Black');
   return headers[color + 'Elo'] ? `${name} · ${headers[color + 'Elo']}` : name;
 }
 
@@ -146,7 +146,7 @@ function drawBoard() {
     image.hidden = !piece;
     if (piece) {
       if (pieceKey !== cell.pieceKey) image.src = `pieces/${pieceKey}.svg`;
-      image.alt = `${pieceNames[piece.type]} (${piece.color === 'w' ? 'brancas' : 'pretas'}), ${square}`;
+      image.alt = `${pieceNames[piece.type]} (${piece.color === 'w' ? 'white' : 'black'}), ${square}`;
     }
     cell.pieceKey = pieceKey;
     cell.square = square;
@@ -199,13 +199,13 @@ function explainError(move, reply) {
   const position = new Chess(move.after);
   const line = continuation.slice(0, 6).map(uci => playUci(position, uci));
   const [first, recapture, followUp] = line;
-  const opponent = move.color === 'w' ? 'As pretas' : 'As brancas';
-  let explanation = `${opponent} podem responder com ${first.san}`;
+  const opponent = move.color === 'w' ? 'Black' : 'White';
+  let explanation = `${opponent} can respond with ${first.san}`;
   const trade = first.captured && recapture?.to === first.to && recapture.captured === first.captured;
-  if (trade && first.captured === 'q') explanation += ', propondo a troca de damas';
-  else if (first.captured) explanation += `, capturando ${pieceNames[first.captured].toLowerCase()} em ${first.to}`;
-  if (first.san.endsWith('#')) explanation += ' e dando mate';
-  else if (first.san.endsWith('+')) explanation += ' com xeque';
+  if (trade && first.captured === 'q') explanation += ', offering a queen trade';
+  else if (first.captured) explanation += `, capturing a ${pieceNames[first.captured].toLowerCase()} on ${first.to}`;
+  if (first.san.endsWith('#')) explanation += ' for checkmate';
+  else if (first.san.endsWith('+')) explanation += ' with check';
 
   const values = { p: 1, n: 3, b: 3, r: 5, q: 9 };
   const balance = line.reduce((total, step) => {
@@ -214,12 +214,12 @@ function explainError(move, reply) {
   }, 0);
   explanation += '.';
   if (trade && followUp?.captured) {
-    explanation += ` Após ${recapture.san}, ${followUp.san} captura ${pieceNames[followUp.captured].toLowerCase()} em ${followUp.to}.`;
+    explanation += ` After ${recapture.san}, ${followUp.san} captures a ${pieceNames[followUp.captured].toLowerCase()} on ${followUp.to}.`;
   }
   if (line.length > 1 && position.isCheckmate()) {
-    explanation += ` Nessa sequência, ${position.turn() === 'w' ? 'as brancas' : 'as pretas'} levam mate.`;
+    explanation += ` In this line, ${position.turn() === 'w' ? 'White' : 'Black'} is checkmated.`;
   } else if (balance > 0 && !position.isCheckmate()) {
-    explanation += ` Nessa sequência, quem jogou perde material líquido equivalente a ${balance} ${balance === 1 ? 'peão' : 'peões'}.`;
+    explanation += ` In this line, the player who made the mistake loses material worth ${balance} ${balance === 1 ? 'pawn' : 'pawns'}.`;
   }
   return { explanation, line: line.map(step => `${step.before.split(' ')[5]}${step.color === 'w' ? '.' : '...'} ${step.san}`).join(' ') };
 }
@@ -227,31 +227,31 @@ function explainError(move, reply) {
 function renderDetail() {
   const move = moves[selected - 1];
   const review = reviews[selected];
-  const title = move ? `${move.before.split(' ')[5]}${move.color === 'b' ? '...' : '.'} ${move.san}` : 'Posição inicial';
+  const title = move ? `${move.before.split(' ')[5]}${move.color === 'b' ? '...' : '.'} ${move.san}` : 'Starting position';
   const head = node('strong', title);
   detail.replaceChildren(head);
   if (!review) {
-    detail.append(node('p', selected ? 'A avaliação deste lance aparece após a análise.' : 'Selecione um lance no gráfico ou na lista.'));
+    detail.append(node('p', selected ? 'The evaluation appears after analysis.' : 'Select a move on the chart or in the move list.'));
     return;
   }
   head.append(node('span', ' · ' + review.label, 'tag ' + review.style));
-  detail.append(node('p', `Avaliação das brancas: ${formatScore(evaluations[selected - 1])} → ${formatScore(evaluations[selected])}`));
+  detail.append(node('p', `White evaluation: ${formatScore(evaluations[selected - 1])} → ${formatScore(evaluations[selected])}`));
   if (review.style === 'mistake' || review.style === 'blunder') {
     const reason = explainError(move, evaluations[selected]);
     if (reason) {
-      detail.append(node('p', reason.explanation), node('p', `Linha após o erro: ${reason.line}`));
+      detail.append(node('p', reason.explanation), node('p', `Line after the mistake: ${reason.line}`));
     }
   }
   if (review.best && review.style !== 'best') {
     const line = node('p', '');
     line.hidden = true;
-    const button = node('button', alternate ? 'Voltar ao lance jogado' : 'Mostrar melhor lance');
+    const button = node('button', alternate ? 'Back to played move' : 'Show best move');
     button.onclick = () => {
       alternate = !alternate;
       drawBoard();
-      if (alternate && !line.textContent) line.textContent = `Linha sugerida: ${suggestedLine(review)}`;
+      if (alternate && !line.textContent) line.textContent = `Suggested line: ${suggestedLine(review)}`;
       line.hidden = !alternate;
-      button.textContent = alternate ? 'Voltar ao lance jogado' : 'Mostrar melhor lance';
+      button.textContent = alternate ? 'Back to played move' : 'Show best move';
     };
     detail.append(line, button);
   }
@@ -313,7 +313,7 @@ function stop() {
   cancelPause?.();
   worker?.terminate();
   worker = undefined;
-  byId('analyze').textContent = 'Analisar partida';
+  byId('analyze').textContent = 'Analyze game';
   byId('progress').hidden = true;
   byId('critical').disabled = !reviews.some(review => review.loss >= 100);
 }
@@ -334,7 +334,7 @@ function pauseBetweenSearches(elapsed) {
 
 function send(engine, commands, complete, parse = () => {}) {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => finish(new Error('Tempo limite do motor')), 20000);
+    const timeout = setTimeout(() => finish(new Error('Engine timed out')), 20000);
     const finish = error => {
       clearTimeout(timeout);
       cancelSearch = undefined;
@@ -342,8 +342,8 @@ function send(engine, commands, complete, parse = () => {}) {
       engine.onerror = null;
       if (error) reject(error);
     };
-    cancelSearch = () => finish(new Error('Análise interrompida'));
-    engine.onerror = () => finish(new Error('Falha ao carregar Stockfish'));
+    cancelSearch = () => finish(new Error('Analysis stopped'));
+    engine.onerror = () => finish(new Error('Could not load Stockfish'));
     engine.onmessage = ({ data }) => {
       const line = String(data);
       parse(line);
@@ -374,7 +374,7 @@ async function evaluate(engine, index) {
     const value = score[1] === 'mate' ? Math.sign(raw) * (10000 - Math.abs(raw)) : raw;
     evaluation = { type: score[1], raw, value, pv };
   });
-  if (!evaluation) throw new Error('Avaliação indisponível');
+  if (!evaluation) throw new Error('Evaluation unavailable');
   evaluation.best = best.split(' ')[1];
   return evaluation;
 }
@@ -413,7 +413,7 @@ async function analyze() {
     stop();
     renderMoves();
     go(selected);
-    byId('status').textContent = 'Análise interrompida.';
+    byId('status').textContent = 'Analysis stopped.';
     return;
   }
   const current = ++run;
@@ -427,8 +427,8 @@ async function analyze() {
   progress.value = 0;
   progress.hidden = false;
   byId('critical').disabled = true;
-  byId('analyze').textContent = 'Interromper análise';
-  byId('status').textContent = 'Carregando Stockfish…';
+  byId('analyze').textContent = 'Stop analysis';
+  byId('status').textContent = 'Loading Stockfish…';
   try {
     const engine = worker = new Worker(engineURL);
     await send(engine, ['uci'], 'uciok');
@@ -445,7 +445,7 @@ async function analyze() {
         analysisFrame = requestAnimationFrame(() => {
           analysisFrame = 0;
           progress.value = evaluations.length;
-          byId('status').textContent = `Analisando posições · ${evaluations.length}/${positions.length}`;
+          byId('status').textContent = `Analyzing positions · ${evaluations.length}/${positions.length}`;
           drawChart();
         });
       }
@@ -453,14 +453,14 @@ async function analyze() {
       if (index + 1 < positions.length) await pauseBetweenSearches(now - started);
     }
     if (current !== run) return;
-    byId('status').textContent = 'Análise rápida concluída';
+    byId('status').textContent = 'Quick analysis complete';
     renderReport();
     const firstError = reviews.findIndex(review => review?.loss >= 100);
     if (firstError > 0 && selected === 0) selected = firstError;
   } catch (error) {
     if (current !== run) return;
     console.error(error);
-    byId('status').textContent = 'Não foi possível concluir a análise. Tente novamente.';
+    byId('status').textContent = 'Could not complete the analysis. Try again.';
   } finally {
     if (current === run) {
       stop();
@@ -484,7 +484,7 @@ byId('import-form').onsubmit = async event => {
     event.target.reset();
     importer.close();
   } catch {
-    byId('import-error').textContent = 'PGN inválido. Copie o texto completo da aba PGN ou selecione o arquivo exportado.';
+    byId('import-error').textContent = 'Invalid PGN. Copy the full text from the PGN tab or choose the exported file.';
   }
 };
 byId('analyze').onclick = analyze;
