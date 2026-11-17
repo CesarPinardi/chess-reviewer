@@ -1,0 +1,370 @@
+import { Chess } from './vendor/chess.mjs';
+
+const example = `[Event "Partida de exemplo"]
+[White "Brancas"]
+[Black "Pretas"]
+[Result "1-0"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 Bc5 4. c3 a6 5. Ba4 Nf6 6. d3 h6
+7. O-O d6 8. Re1 Ng4 9. d4 exd4 10. cxd4 Ba7 11. e5 dxe5 12. dxe5 O-O
+13. Qxd8 Rxd8 14. Re2 Rd1+ 15. Bxd1 Nb4 16. Nc3 Nd3 17. Be3 Ndxe5
+18. Bxa7 Nxf3+ 19. gxf3 Nxf2 20. Bxf2 Bg4 21. fxg4 1-0`;
+
+const byId = id => document.getElementById(id);
+const engineURL = new URL('./vendor/stockfish-17.1-lite-single-03e3232.js', import.meta.url);
+const board = byId('board');
+const chart = byId('chart');
+const detail = byId('detail');
+const importer = byId('importer');
+const nav = [...document.querySelectorAll('[data-nav]')];
+let game, moves, positions, moveButtons;
+let selected = 0;
+let flipped = false;
+let alternate = false;
+let worker;
+let run = 0;
+let evaluations = [];
+let reviews = [];
+
+function node(tag, text, className) {
+  const element = document.createElement(tag);
+  element.textContent = text;
+  if (className) element.className = className;
+  return element;
+}
+
+function importGame(text, sample = false) {
+  const next = new Chess();
+  const clean = text.replace(/^\uFEFF/, '').replace(/\\(?=[.:/])/g, '').replace(/\\(?=\r?$)/gm, '');
+  next.loadPgn(clean.trim());
+  const history = next.history({ verbose: true });
+  if (!history.length) throw new Error('PGN sem lances');
+  stop();
+  game = next;
+  moves = history;
+  positions = [moves[0].before, ...moves.map(move => move.after)];
+  evaluations = [];
+  reviews = [];
+  flipped = false;
+  byId('game').textContent = sample ? 'Partida de exemplo · 1–0' :
+    `${player('White')} × ${player('Black')} · ${game.getHeaders().Result || '*'}`;
+  byId('status').textContent = 'Analise a partida para encontrar os lances decisivos.';
+  renderMoves();
+  go(0);
+}
+
+function player(color) {
+  const headers = game.getHeaders();
+  const name = headers[color] || (color === 'White' ? 'Brancas' : 'Pretas');
+  return headers[color + 'Elo'] ? `${name} · ${headers[color + 'Elo']}` : name;
+}
+
+function renderMoves() {
+  const rows = [];
+  moveButtons = moves.map((move, index) => {
+    const number = move.before.split(' ')[5];
+    if (index === 0 || move.color === 'w') {
+      const row = node('div', '', 'row');
+      row.append(node('span', number + '.'));
+      if (move.color === 'b') row.append(node('span', '…'));
+      rows.push(row);
+    }
+    const review = reviews[index + 1];
+    const button = node('button', move.san + (review?.symbol ? ' ' + review.symbol : ''), review?.style);
+    if (review) button.title = review.label;
+    button.onclick = () => go(index + 1);
+    rows.at(-1).append(button);
+    return button;
+  });
+  byId('moves').replaceChildren(...rows);
+}
+
+function squareCoordinates(square) {
+  const x = square.charCodeAt(0) - 97;
+  const y = 8 - Number(square[1]);
+  return flipped ? [7 - x, 7 - y] : [x, y];
+}
+
+function drawBoard() {
+  const review = reviews[selected];
+  const position = new Chess(positions[alternate ? selected - 1 : selected]);
+  let last = moves[selected - 1];
+  if (alternate) last = playUci(position, review.best);
+  let layout = position.board().flat();
+  if (flipped) layout = layout.reverse();
+  board.replaceChildren(...layout.map((piece, index) => {
+    const file = index % 8;
+    const rank = Math.floor(index / 8);
+    const square = `${'abcdefgh'[flipped ? 7 - file : file]}${flipped ? rank + 1 : 8 - rank}`;
+    const tile = node('div', '', 'square');
+    tile.classList.toggle('dark', (file + rank) % 2 === 1);
+    tile.classList.toggle('last', square === last?.from || square === last?.to);
+    if (!file) tile.append(node('span', square[1], 'rank'));
+    if (rank === 7) tile.append(node('span', square[0], 'file'));
+    if (piece) {
+      const image = document.createElement('img');
+      image.src = `pieces/${piece.color}${piece.type.toUpperCase()}.svg`;
+      const names = { k: 'Rei', q: 'Dama', r: 'Torre', b: 'Bispo', n: 'Cavalo', p: 'Peão' };
+      image.alt = `${names[piece.type]} (${piece.color === 'w' ? 'brancas' : 'pretas'}), ${square}`;
+      tile.append(image);
+    }
+    return tile;
+  }));
+  const arrows = byId('arrows');
+  arrows.replaceChildren();
+  if (alternate && last) {
+    const [x, y] = squareCoordinates(last.from);
+    const [tx, ty] = squareCoordinates(last.to);
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const length = Math.hypot(tx - x, ty - y);
+    const dx = (tx - x) / length, dy = (ty - y) / length;
+    const ex = tx + .5, ey = ty + .5;
+    path.setAttribute('d', `M${x + .5} ${y + .5} L${ex} ${ey} m${-.45 * dx + .25 * dy} ${-.45 * dy - .25 * dx} L${ex} ${ey} l${-.45 * dx - .25 * dy} ${-.45 * dy + .25 * dx}`);
+    path.setAttribute('stroke', '#e7ff80');
+    path.setAttribute('stroke-width', '.14');
+    path.setAttribute('fill', 'none');
+    arrows.append(path);
+  }
+  byId('top').textContent = player(flipped ? 'White' : 'Black');
+  byId('bottom').textContent = player(flipped ? 'Black' : 'White');
+  const evaluation = alternate ? evaluations[selected - 1] : evaluations[selected];
+  byId('score').textContent = alternate ? '—' : formatScore(evaluation);
+  const ratio = 50 + 50 * Math.tanh((alternate ? 0 : (evaluation?.value ?? 0)) / 400);
+  byId('balance').style.height = `${flipped ? 100 - ratio : ratio}%`;
+  byId('balance').style.background = flipped ? '#161b18' : '';
+  byId('balance').parentElement.style.background = flipped ? '#eeefe5' : '';
+}
+
+function formatScore(evaluation) {
+  if (!evaluation) return '—';
+  if (evaluation.type === 'mate') return evaluation.value < 0 ? '−M' + Math.abs(evaluation.raw) : 'M' + Math.abs(evaluation.raw);
+  return `${evaluation.value > 0 ? '+' : ''}${(evaluation.value / 100).toFixed(1)}`;
+}
+
+function playUci(position, uci) {
+  return position.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
+}
+
+function renderDetail() {
+  const move = moves[selected - 1];
+  const review = reviews[selected];
+  const title = move ? `${move.before.split(' ')[5]}${move.color === 'b' ? '...' : '.'} ${move.san}` : 'Posição inicial';
+  const head = node('strong', title);
+  detail.replaceChildren(head);
+  if (!review) {
+    detail.append(node('p', selected ? 'A avaliação deste lance aparece após a análise.' : 'Selecione um lance no gráfico ou na lista.'));
+    return;
+  }
+  head.append(node('span', ' · ' + review.label, 'tag ' + review.style));
+  detail.append(node('p', `Avaliação das brancas: ${formatScore(evaluations[selected - 1])} → ${formatScore(evaluations[selected])}`));
+  if (review.line && review.style !== 'best') {
+    const line = node('p', `Linha sugerida: ${review.line}`);
+    line.hidden = !alternate;
+    const button = node('button', alternate ? 'Voltar ao lance jogado' : 'Mostrar melhor lance');
+    button.onclick = () => {
+      alternate = !alternate;
+      drawBoard();
+      line.hidden = !alternate;
+      button.textContent = alternate ? 'Voltar ao lance jogado' : 'Mostrar melhor lance';
+    };
+    detail.append(line, button);
+  }
+}
+
+function drawChart() {
+  const scale = window.devicePixelRatio || 1;
+  chart.width = Math.round(chart.clientWidth * scale);
+  chart.height = Math.round(chart.clientHeight * scale);
+  const ctx = chart.getContext('2d');
+  ctx.scale(scale, scale);
+  const width = chart.clientWidth;
+  const height = chart.clientHeight;
+  const x = index => 4 + index * (width - 8) / moves.length;
+  const y = value => height / 2 - Math.tanh(value / 400) * (height / 2 - 5);
+  ctx.strokeStyle = '#66756a';
+  ctx.beginPath();
+  ctx.moveTo(4, y(0));
+  ctx.lineTo(width - 4, y(0));
+  ctx.stroke();
+  if (evaluations.length) {
+    ctx.beginPath();
+    evaluations.forEach(({ value }, index) => {
+      if (index === 0) ctx.moveTo(x(index), y(value));
+      else ctx.lineTo(x(index), y(value));
+    });
+    ctx.strokeStyle = '#d2ea91';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.moveTo(x(selected), 4);
+  ctx.lineTo(x(selected), height - 4);
+  ctx.strokeStyle = '#e8eee8aa';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+function go(index) {
+  selected = Math.max(0, Math.min(index, moves.length));
+  alternate = false;
+  moveButtons.forEach((button, i) => button.setAttribute('aria-current', String(i + 1 === selected)));
+  moveButtons[selected - 1]?.scrollIntoView({ block: 'nearest', container: 'nearest' });
+  nav.forEach((button, i) => button.disabled = i < 2 ? selected === 0 : selected === moves.length);
+  drawBoard();
+  renderDetail();
+  drawChart();
+}
+
+function stop() {
+  run++;
+  worker?.terminate();
+  worker = undefined;
+  byId('analyze').textContent = 'Analisar partida';
+  byId('progress').hidden = true;
+  byId('critical').disabled = !reviews.some(review => review.loss >= 100);
+}
+
+function send(engine, commands, complete, parse = () => {}) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => finish(new Error('Tempo limite do motor')), 20000);
+    const finish = error => {
+      clearTimeout(timeout);
+      engine.onmessage = null;
+      engine.onerror = null;
+      if (error) reject(error);
+    };
+    engine.onerror = () => finish(new Error('Falha ao carregar Stockfish'));
+    engine.onmessage = ({ data }) => {
+      const line = String(data);
+      parse(line);
+      if (line.startsWith(complete)) {
+        finish();
+        resolve(line);
+      }
+    };
+    commands.forEach(command => engine.postMessage(command));
+  });
+}
+
+async function evaluate(engine, index) {
+  const fen = positions[index];
+  const side = fen.split(' ')[1] === 'w' ? 1 : -1;
+  const position = new Chess(fen);
+  if (position.isCheckmate()) return { type: 'mate', raw: 0, value: -side * 10000 };
+  if (position.isDraw()) return { type: 'cp', raw: 0, value: 0 };
+  let evaluation;
+  // Include the played move history so the engine can reason about repetitions.
+  const played = moves.slice(0, index).map(move => move.lan).join(' ');
+  const command = `position fen ${positions[0]}${played ? ' moves ' + played : ''}`;
+  const best = await send(engine, [command, 'go depth 13'], 'bestmove', line => {
+    const score = line.match(/\bscore (cp|mate) (-?\d+)/);
+    if (!score || /\b(?:upperbound|lowerbound)\b/.test(line)) return;
+    const raw = Number(score[2]) * side;
+    const pv = line.split(' pv ')[1]?.trim().split(/\s+/) || [];
+    const value = score[1] === 'mate' ? Math.sign(raw) * (10000 - Math.abs(raw)) : raw;
+    evaluation = { type: score[1], raw, value, pv };
+  });
+  if (!evaluation) throw new Error('Avaliação indisponível');
+  evaluation.best = best.split(' ')[1];
+  return evaluation;
+}
+
+function classify(index) {
+  const before = evaluations[index - 1];
+  const after = evaluations[index];
+  const move = moves[index - 1];
+  const side = move.color === 'w' ? 1 : -1;
+  const loss = move.lan === before.best ? 0 : Math.max(0, (before.value - after.value) * side);
+  let label = 'Bom lance', style = 'good', symbol = '';
+  if (move.lan === before.best) [label, style, symbol] = ['Melhor lance', 'best', '★'];
+  else if (loss >= 200) [label, style, symbol] = ['Erro grave', 'blunder', '??'];
+  else if (loss >= 100) [label, style, symbol] = ['Erro', 'mistake', '?'];
+  else if (loss >= 50) [label, style, symbol] = ['Imprecisão', 'inaccuracy', '?!'];
+  const position = new Chess(positions[index - 1]);
+  const continuation = before.pv?.[0] === before.best ? before.pv.slice(0, 5) : [before.best].filter(Boolean);
+  const line = continuation.map(uci => playUci(position, uci).san).join(' ');
+  return { loss, label, style, symbol, best: before.best, line };
+}
+
+async function analyze() {
+  if (worker) {
+    stop();
+    renderMoves();
+    go(selected);
+    byId('status').textContent = 'Análise interrompida.';
+    return;
+  }
+  const current = ++run;
+  evaluations = [];
+  reviews = [];
+  renderMoves();
+  go(selected);
+  const progress = byId('progress');
+  progress.max = positions.length;
+  progress.value = 0;
+  progress.hidden = false;
+  byId('critical').disabled = true;
+  byId('analyze').textContent = 'Interromper análise';
+  byId('status').textContent = 'Carregando Stockfish…';
+  try {
+    const engine = worker = new Worker(engineURL);
+    await send(engine, ['uci'], 'uciok');
+    for (let index = 0; index < positions.length && current === run; index++) {
+      const result = await evaluate(engine, index);
+      if (current !== run) return;
+      evaluations.push(result);
+      if (index) reviews[index] = classify(index);
+      progress.value = index + 1;
+      byId('status').textContent = `Analisando posições · ${index + 1}/${positions.length}`;
+      drawChart();
+    }
+    if (current !== run) return;
+    byId('status').textContent = 'Análise concluída · profundidade 13';
+    const firstError = reviews.findIndex(review => review?.loss >= 100);
+    if (firstError > 0 && selected === 0) selected = firstError;
+  } catch (error) {
+    if (current !== run) return;
+    console.error(error);
+    byId('status').textContent = 'Não foi possível concluir a análise. Tente novamente.';
+  } finally {
+    if (current === run) {
+      stop();
+      renderMoves();
+      go(selected);
+    }
+  }
+}
+
+byId('open').onclick = () => {
+  byId('import-error').textContent = '';
+  importer.showModal();
+};
+byId('close').onclick = () => importer.close();
+byId('import-form').onsubmit = async event => {
+  event.preventDefault();
+  try {
+    const file = byId('file').files[0];
+    const pasted = byId('pgn').value.trim();
+    importGame(pasted || (file ? await file.text() : ''));
+    event.target.reset();
+    importer.close();
+  } catch {
+    byId('import-error').textContent = 'PGN inválido. Copie o texto completo da aba PGN ou selecione o arquivo exportado.';
+  }
+};
+byId('analyze').onclick = analyze;
+byId('flip').onclick = () => { flipped = !flipped; drawBoard(); };
+byId('critical').onclick = () => {
+  const next = reviews.findIndex((review, index) => index > selected && review?.loss >= 100);
+  go(next > 0 ? next : reviews.findIndex(review => review?.loss >= 100));
+};
+nav.forEach((button, i) => button.onclick = () => go([0, selected - 1, selected + 1, moves.length][i]));
+document.addEventListener('keydown', event => {
+  if (importer.open || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+  event.preventDefault();
+  go(selected + (event.key === 'ArrowLeft' ? -1 : 1));
+});
+chart.onclick = event => go(Math.round((event.offsetX - 4) / (chart.clientWidth - 8) * moves.length));
+new ResizeObserver(drawChart).observe(chart);
+importGame(example, true);

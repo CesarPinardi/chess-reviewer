@@ -1,0 +1,12 @@
+Stockfish.js 17.1.0 (lite, single-thread), GPLv3.
+Source and build instructions: https://github.com/nmrugg/stockfish.js/tree/v17.1.0
+Release: https://registry.npmjs.org/stockfish/-/stockfish-17.1.0.tgz
+License: Copying.txt
+
+chess.js 1.4.0, BSD-2-Clause.
+Source: https://github.com/jhlywa/chess.js/tree/v1.4.0
+License: LICENSE
+
+Chess pieces by Colin M. L. Burnett, GPLv2 or later.
+Source: https://github.com/lichess-org/lila/tree/master/public/piece/cburnett
+License: https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt
