@@ -193,6 +193,37 @@ function suggestedLine(review) {
   return continuation.map(uci => playUci(position, uci).san).join(' ');
 }
 
+function explainError(move, reply) {
+  const continuation = reply?.pv?.[0] === reply?.best ? reply?.pv : [reply?.best].filter(Boolean);
+  if (!continuation?.length) return null;
+  const position = new Chess(move.after);
+  const line = continuation.slice(0, 6).map(uci => playUci(position, uci));
+  const [first, recapture, followUp] = line;
+  const opponent = move.color === 'w' ? 'As pretas' : 'As brancas';
+  let explanation = `${opponent} podem responder com ${first.san}`;
+  const trade = first.captured && recapture?.to === first.to && recapture.captured === first.captured;
+  if (trade && first.captured === 'q') explanation += ', propondo a troca de damas';
+  else if (first.captured) explanation += `, capturando ${pieceNames[first.captured].toLowerCase()} em ${first.to}`;
+  if (first.san.endsWith('#')) explanation += ' e dando mate';
+  else if (first.san.endsWith('+')) explanation += ' com xeque';
+
+  const values = { p: 1, n: 3, b: 3, r: 5, q: 9 };
+  const balance = line.reduce((total, step) => {
+    const gain = (values[step.captured] || 0) + (step.promotion ? values[step.promotion] - 1 : 0);
+    return total + (step.color === move.color ? -gain : gain);
+  }, 0);
+  explanation += '.';
+  if (trade && followUp?.captured) {
+    explanation += ` Após ${recapture.san}, ${followUp.san} captura ${pieceNames[followUp.captured].toLowerCase()} em ${followUp.to}.`;
+  }
+  if (line.length > 1 && position.isCheckmate()) {
+    explanation += ` Nessa sequência, ${position.turn() === 'w' ? 'as brancas' : 'as pretas'} levam mate.`;
+  } else if (balance > 0 && !position.isCheckmate()) {
+    explanation += ` Nessa sequência, quem jogou perde material líquido equivalente a ${balance} ${balance === 1 ? 'peão' : 'peões'}.`;
+  }
+  return { explanation, line: line.map(step => `${step.before.split(' ')[5]}${step.color === 'w' ? '.' : '...'} ${step.san}`).join(' ') };
+}
+
 function renderDetail() {
   const move = moves[selected - 1];
   const review = reviews[selected];
@@ -205,6 +236,12 @@ function renderDetail() {
   }
   head.append(node('span', ' · ' + review.label, 'tag ' + review.style));
   detail.append(node('p', `Avaliação das brancas: ${formatScore(evaluations[selected - 1])} → ${formatScore(evaluations[selected])}`));
+  if (review.style === 'mistake' || review.style === 'blunder') {
+    const reason = explainError(move, evaluations[selected]);
+    if (reason) {
+      detail.append(node('p', reason.explanation), node('p', `Linha após o erro: ${reason.line}`));
+    }
+  }
   if (review.best && review.style !== 'best') {
     const line = node('p', '');
     line.hidden = true;
