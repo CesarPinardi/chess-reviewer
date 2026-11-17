@@ -22,6 +22,11 @@ let game, moves, positions, moveButtons;
 let selected = 0;
 let flipped = false;
 let alternate = false;
+let variation;
+let variationMoves = [];
+let fromSquare;
+let legalMoves = [];
+let pendingPromotion;
 let worker;
 let cancelSearch;
 let cancelPause;
@@ -129,8 +134,8 @@ function showMoveMark(square, review) {
 
 function drawBoard() {
   const review = reviews[selected];
-  const position = new Chess(positions[alternate ? selected - 1 : selected]);
-  let last = moves[selected - 1];
+  const position = variation || new Chess(positions[alternate ? selected - 1 : selected]);
+  let last = variation ? variationMoves.at(-1) : moves[selected - 1];
   if (alternate) last = playUci(position, review.best);
   let layout = position.board().flat();
   if (flipped) layout = layout.reverse();
@@ -139,9 +144,25 @@ function drawBoard() {
     const { file, rank, tile, image, rankLabel, fileLabel } = cell;
     const square = `${'abcdefgh'[flipped ? 7 - file : file]}${flipped ? rank + 1 : 8 - rank}`;
     tile.classList.toggle('last', square === last?.from || square === last?.to);
+    tile.classList.toggle('selected', square === fromSquare);
+    const legal = legalMoves.find(move => move.to === square);
+    tile.classList.toggle('legal', Boolean(legal));
+    tile.classList.toggle('capture', Boolean(legal?.captured));
+    if (variation && !tile.hasAttribute('role')) {
+      tile.setAttribute('role', 'button');
+      tile.tabIndex = index === 0 ? 0 : -1;
+    } else if (!variation && tile.hasAttribute('role')) {
+      tile.removeAttribute('role');
+      tile.removeAttribute('tabindex');
+      tile.removeAttribute('aria-label');
+    }
     if (rankLabel && rankLabel.textContent !== square[1]) rankLabel.textContent = square[1];
     if (fileLabel && fileLabel.textContent !== square[0]) fileLabel.textContent = square[0];
     const pieceKey = piece ? piece.color + piece.type.toUpperCase() : '';
+    if (variation) {
+      const label = piece ? `${square}, ${piece.color === 'w' ? 'white' : 'black'} ${pieceNames[piece.type].toLowerCase()}` : square;
+      if (tile.getAttribute('aria-label') !== label) tile.setAttribute('aria-label', label);
+    }
     if (pieceKey === cell.pieceKey && cell.square === square) return;
     image.hidden = !piece;
     if (piece) {
@@ -152,7 +173,7 @@ function drawBoard() {
     cell.square = square;
   });
   const arrows = byId('arrows');
-  showMoveMark(last?.to, review);
+  showMoveMark(last?.to, variation ? null : review);
   arrows.replaceChildren();
   if (alternate && last) {
     const [x, y] = squareCoordinates(last.from);
@@ -170,8 +191,8 @@ function drawBoard() {
   byId('top').textContent = player(flipped ? 'White' : 'Black');
   byId('bottom').textContent = player(flipped ? 'Black' : 'White');
   const evaluation = alternate ? evaluations[selected - 1] : evaluations[selected];
-  byId('score').textContent = alternate ? '—' : formatScore(evaluation);
-  const ratio = 50 + 50 * Math.tanh((alternate ? 0 : (evaluation?.value ?? 0)) / 400);
+  byId('score').textContent = alternate || variation ? '—' : formatScore(evaluation);
+  const ratio = 50 + 50 * Math.tanh((alternate || variation ? 0 : (evaluation?.value ?? 0)) / 400);
   byId('balance').style.height = `${flipped ? 100 - ratio : ratio}%`;
   byId('balance').style.background = flipped ? '#161b18' : '';
   byId('balance').parentElement.style.background = flipped ? '#eeefe5' : '';
@@ -225,6 +246,13 @@ function explainError(move, reply) {
 }
 
 function renderDetail() {
+  if (variation) {
+    const side = variation.turn() === 'w' ? 'White' : 'Black';
+    const status = variation.isCheckmate() ? 'Checkmate.' : variation.isStalemate() ? 'Stalemate.' : `${side} to move. Select a piece to see its legal moves.`;
+    detail.replaceChildren(node('strong', 'Practice variation'), node('p', status));
+    if (variationMoves.length) detail.append(node('p', variationMoves.map(move => move.san).join(' ')));
+    return;
+  }
   const move = moves[selected - 1];
   const review = reviews[selected];
   const title = move ? `${move.before.split(' ')[5]}${move.color === 'b' ? '...' : '.'} ${move.san}` : 'Starting position';
@@ -294,6 +322,7 @@ function drawChart() {
 }
 
 function go(index) {
+  clearVariation();
   moveButtons[selected - 1]?.removeAttribute('aria-current');
   selected = Math.max(0, Math.min(index, moves.length));
   alternate = false;
@@ -305,6 +334,87 @@ function go(index) {
   drawChart();
 }
 
+function clearVariation() {
+  variation = undefined;
+  variationMoves = [];
+  fromSquare = undefined;
+  legalMoves = [];
+  pendingPromotion = undefined;
+  byId('promotion-label').hidden = true;
+  byId('try-moves').textContent = 'Try moves';
+  byId('analyze').disabled = false;
+}
+
+function playVariation(move) {
+  variationMoves.push(variation.move(move));
+  fromSquare = undefined;
+  legalMoves = [];
+  pendingPromotion = undefined;
+  byId('promotion-label').hidden = true;
+  drawBoard();
+  renderDetail();
+}
+
+function pickSquare(square) {
+  if (!variation || pendingPromotion) return;
+  const destination = legalMoves.find(move => move.to === square);
+  if (destination?.promotion) {
+    pendingPromotion = { from: fromSquare, to: square };
+    byId('promotion-label').hidden = false;
+    byId('promotion').value = '';
+    byId('promotion').focus();
+    return;
+  }
+  if (destination) {
+    playVariation({ from: fromSquare, to: square });
+    return;
+  }
+  fromSquare = fromSquare === square ? undefined : square;
+  legalMoves = fromSquare ? variation.moves({ square: fromSquare, verbose: true }) : [];
+  if (!legalMoves.length) fromSquare = undefined;
+  drawBoard();
+}
+
+byId('try-moves').onclick = () => {
+  if (variation) {
+    go(selected);
+    return;
+  }
+  variation = new Chess(positions[selected]);
+  alternate = false;
+  byId('try-moves').textContent = 'Back to game';
+  byId('analyze').disabled = true;
+  drawBoard();
+  renderDetail();
+};
+byId('promotion').onchange = event => {
+  if (pendingPromotion) {
+    const [x, y] = squareCoordinates(pendingPromotion.to);
+    playVariation({ ...pendingPromotion, promotion: event.target.value });
+    tiles[y * 8 + x].tile.focus();
+  }
+};
+tiles.forEach(({ tile }, index) => {
+  tile.onclick = () => pickSquare(tiles[index].square);
+  tile.onkeydown = event => {
+    if (!variation) return;
+    const offset = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -8, ArrowDown: 8 }[event.key];
+    if (offset) {
+      event.preventDefault();
+      event.stopPropagation();
+      const target = tiles[index + offset]?.tile;
+      if (target && (Math.abs(offset) === 8 || Math.floor(index / 8) === Math.floor((index + offset) / 8))) {
+        tile.tabIndex = -1;
+        target.tabIndex = 0;
+        target.focus();
+      }
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      pickSquare(tiles[index].square);
+    }
+  };
+});
+
 function stop() {
   run++;
   cancelAnimationFrame(analysisFrame);
@@ -314,6 +424,7 @@ function stop() {
   worker?.terminate();
   worker = undefined;
   byId('analyze').textContent = 'Analyze game';
+  byId('try-moves').disabled = false;
   byId('progress').hidden = true;
   byId('critical').disabled = !reviews.some(review => review.loss >= 100);
 }
@@ -428,6 +539,7 @@ async function analyze() {
   progress.hidden = false;
   byId('critical').disabled = true;
   byId('analyze').textContent = 'Stop analysis';
+  byId('try-moves').disabled = true;
   byId('status').textContent = 'Loading Stockfish…';
   try {
     const engine = worker = new Worker(engineURL);
@@ -495,7 +607,7 @@ byId('critical').onclick = () => {
 };
 nav.forEach((button, i) => button.onclick = () => go([0, selected - 1, selected + 1, moves.length][i]));
 document.addEventListener('keydown', event => {
-  if (importer.open || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (importer.open || event.target.closest?.('select, input, textarea') || event.altKey || event.ctrlKey || event.metaKey) return;
   if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
   event.preventDefault();
   go(selected + (event.key === 'ArrowLeft' ? -1 : 1));

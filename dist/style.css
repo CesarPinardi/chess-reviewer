@@ -21,6 +21,13 @@ button:disabled{opacity:.43;cursor:default}
 .square{position:relative;display:grid;place-items:center;min-width:0;background:#e4e7ce;color:#62765a}
 .square.dark{background:#738a67;color:#edf0d6}
 .square.last{box-shadow:inset 0 0 0 100px #e2e75b65}
+.square[role=button]{cursor:pointer}
+.square[role=button]:focus-visible{outline-offset:-3px;z-index:1}
+.square.selected{box-shadow:inset 0 0 0 3px #294522}
+.square.legal::after{content:'';position:absolute;width:24%;aspect-ratio:1;border-radius:50%;background:#213d2670;pointer-events:none;z-index:1}
+.square.legal.capture::after{width:91%;background:none;border:4px solid #213d2670}
+.practice{display:flex;align-items:center;gap:10px;padding:10px 17px;border-bottom:1px solid var(--line)}
+.practice label{margin:0}
 .square img{width:90%;height:90%;object-fit:contain;position:absolute;pointer-events:none}
 .rank,.file{position:absolute;font-size:clamp(8px,1.2vw,13px);font-weight:800;z-index:1}
 .rank{top:2px;left:3px}.file{bottom:1px;right:3px}

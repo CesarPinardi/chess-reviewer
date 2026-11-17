@@ -8,6 +8,7 @@ Review a chess game with Stockfish in your browser. Paste a PGN or open a `.pgn`
 2. In Chess Reviewer, click **Import PGN**, paste the text or select the file, then click **Load game**.
 3. Click **Analyze game**. You can navigate with the move list, graph, or left and right arrow keys while Stockfish works.
 4. After analysis, review the **Game summary** or click **Next mistake** to jump between critical moves. You can also analyze the sample game without importing anything.
+5. Click **Try moves** to play a variation from the selected position. Choose a piece and a highlighted destination. Click **Back to game** to return to the original move.
 
 The PGN contains the full move history. A standalone FEN describes a single position.
 
