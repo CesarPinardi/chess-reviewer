@@ -23,12 +23,21 @@ let flipped = false;
 let alternate = false;
 let worker;
 let cancelSearch;
+let cancelPause;
 let run = 0;
 let evaluations = [];
 let reviews = [];
 let analysisFrame = 0;
-const searchNodes = 12000;
+const searchNodes = 10000;
 const searchDepth = 13;
+const categories = {
+  best: { label: 'Melhor lance', symbol: '★' },
+  excellent: { label: 'Excelente', symbol: '!' },
+  good: { label: 'Bom lance', symbol: '' },
+  inaccuracy: { label: 'Imprecisão', symbol: '?!' },
+  mistake: { label: 'Erro', symbol: '?' },
+  blunder: { label: 'Erro grave', symbol: '??' },
+};
 const pieceNames = { k: 'Rei', q: 'Dama', r: 'Torre', b: 'Bispo', n: 'Cavalo', p: 'Peão' };
 const tiles = Array.from({ length: 64 }, (_, index) => {
   const file = index % 8;
@@ -63,6 +72,7 @@ function importGame(text, sample = false) {
   positions = [moves[0].before, ...moves.map(move => move.after)];
   evaluations = [];
   reviews = [];
+  byId('report').hidden = true;
   flipped = false;
   byId('game').textContent = sample ? 'Partida de exemplo · 1–0' :
     `${player('White')} × ${player('Black')} · ${game.getHeaders().Result || '*'}`;
@@ -162,6 +172,12 @@ function playUci(position, uci) {
   return position.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
 }
 
+function suggestedLine(review) {
+  const position = new Chess(positions[selected - 1]);
+  const continuation = review.pv?.[0] === review.best ? review.pv.slice(0, 5) : [review.best];
+  return continuation.map(uci => playUci(position, uci).san).join(' ');
+}
+
 function renderDetail() {
   const move = moves[selected - 1];
   const review = reviews[selected];
@@ -174,13 +190,14 @@ function renderDetail() {
   }
   head.append(node('span', ' · ' + review.label, 'tag ' + review.style));
   detail.append(node('p', `Avaliação das brancas: ${formatScore(evaluations[selected - 1])} → ${formatScore(evaluations[selected])}`));
-  if (review.line && review.style !== 'best') {
-    const line = node('p', `Linha sugerida: ${review.line}`);
-    line.hidden = !alternate;
+  if (review.best && review.style !== 'best') {
+    const line = node('p', '');
+    line.hidden = true;
     const button = node('button', alternate ? 'Voltar ao lance jogado' : 'Mostrar melhor lance');
     button.onclick = () => {
       alternate = !alternate;
       drawBoard();
+      if (alternate && !line.textContent) line.textContent = `Linha sugerida: ${suggestedLine(review)}`;
       line.hidden = !alternate;
       button.textContent = alternate ? 'Voltar ao lance jogado' : 'Mostrar melhor lance';
     };
@@ -241,11 +258,26 @@ function stop() {
   cancelAnimationFrame(analysisFrame);
   analysisFrame = 0;
   cancelSearch?.();
+  cancelPause?.();
   worker?.terminate();
   worker = undefined;
   byId('analyze').textContent = 'Analisar partida';
   byId('progress').hidden = true;
   byId('critical').disabled = !reviews.some(review => review.loss >= 100);
+}
+
+function pauseBetweenSearches(elapsed) {
+  return new Promise(resolve => {
+    const timer = setTimeout(() => {
+      cancelPause = undefined;
+      resolve();
+    }, Math.max(40, elapsed * 1.5));
+    cancelPause = () => {
+      clearTimeout(timer);
+      cancelPause = undefined;
+      resolve();
+    };
+  });
 }
 
 function send(engine, commands, complete, parse = () => {}) {
@@ -301,15 +333,27 @@ function classify(index) {
   const move = moves[index - 1];
   const side = move.color === 'w' ? 1 : -1;
   const loss = move.lan === before.best ? 0 : Math.max(0, (before.value - after.value) * side);
-  let label = 'Bom lance', style = 'good', symbol = '';
-  if (move.lan === before.best) [label, style, symbol] = ['Melhor lance', 'best', '★'];
-  else if (loss >= 200) [label, style, symbol] = ['Erro grave', 'blunder', '??'];
-  else if (loss >= 100) [label, style, symbol] = ['Erro', 'mistake', '?'];
-  else if (loss >= 50) [label, style, symbol] = ['Imprecisão', 'inaccuracy', '?!'];
-  const position = new Chess(positions[index - 1]);
-  const continuation = before.pv?.[0] === before.best ? before.pv.slice(0, 5) : [before.best].filter(Boolean);
-  const line = continuation.map(uci => playUci(position, uci).san).join(' ');
-  return { loss, label, style, symbol, best: before.best, line };
+  let style = 'good';
+  if (move.lan === before.best) style = 'best';
+  else if (loss >= 200) style = 'blunder';
+  else if (loss >= 100) style = 'mistake';
+  else if (loss >= 50) style = 'inaccuracy';
+  else if (loss < 20) style = 'excellent';
+  return { loss, style, ...categories[style], best: before.best, pv: before.pv };
+}
+
+function renderReport() {
+  const counts = Object.fromEntries(Object.keys(categories).map(style => [style, { w: 0, b: 0 }]));
+  reviews.forEach((review, index) => counts[review.style][moves[index - 1].color]++);
+  const rows = Object.entries(categories).map(([style, { label, symbol }]) => {
+    const row = node('tr', '');
+    const title = node('th', [symbol, label].filter(Boolean).join(' '), style);
+    title.scope = 'row';
+    row.append(title, node('td', counts[style].w), node('td', counts[style].b));
+    return row;
+  });
+  byId('report-counts').replaceChildren(...rows);
+  byId('report').hidden = false;
 }
 
 async function analyze() {
@@ -323,6 +367,7 @@ async function analyze() {
   const current = ++run;
   evaluations = [];
   reviews = [];
+  byId('report').hidden = true;
   renderMoves();
   go(selected);
   const progress = byId('progress');
@@ -335,12 +380,16 @@ async function analyze() {
   try {
     const engine = worker = new Worker(engineURL);
     await send(engine, ['uci'], 'uciok');
+    let lastUpdate = 0;
     for (let index = 0; index < positions.length && current === run; index++) {
+      const started = performance.now();
       const result = await evaluate(engine, index);
       if (current !== run) return;
       evaluations.push(result);
       if (index) reviews[index] = classify(index);
-      if (!analysisFrame) {
+      const now = performance.now();
+      if (!analysisFrame && now - lastUpdate >= 200) {
+        lastUpdate = now;
         analysisFrame = requestAnimationFrame(() => {
           analysisFrame = 0;
           progress.value = evaluations.length;
@@ -348,11 +397,12 @@ async function analyze() {
           drawChart();
         });
       }
-      // Give the browser and other tabs time between searches.
-      await new Promise(resolve => setTimeout(resolve, 20));
+      // Slow searches leave a proportionally longer interval for the browser.
+      if (index + 1 < positions.length) await pauseBetweenSearches(now - started);
     }
     if (current !== run) return;
     byId('status').textContent = 'Análise rápida concluída';
+    renderReport();
     const firstError = reviews.findIndex(review => review?.loss >= 100);
     if (firstError > 0 && selected === 0) selected = firstError;
   } catch (error) {

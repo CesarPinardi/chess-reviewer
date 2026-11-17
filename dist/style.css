@@ -40,6 +40,15 @@ p{margin:7px 0 0;line-height:1.5;overflow-wrap:anywhere}
 progress{margin-top:8px;accent-color:var(--green)}
 .detail{min-height:116px;background:#1b221d;border-block:1px solid var(--line)}
 .detail button{margin-top:9px}
+.report{padding:0 17px 15px}
+.report h2{font-size:1rem;margin:0 0 8px}
+.report table{width:100%;border-collapse:collapse;font-size:.83rem;font-variant-numeric:tabular-nums}
+.report th,.report td{padding:5px 4px;border-bottom:1px solid var(--line);text-align:center}
+.report th:first-child{text-align:left}
+.report thead th{color:var(--muted);font-size:.72rem;font-weight:600}
+.report tbody th{font-weight:600}
+.report tbody td{width:20%}
+.best,.excellent{color:var(--green)}
 .moves{max-height:255px;overflow:auto;padding:0 17px 9px}
 .row{display:grid;grid-template-columns:38px repeat(2,minmax(0,1fr));gap:4px;align-items:center;padding:2px 0;font-size:.78rem;color:var(--muted)}
 .row button{padding:6px 9px;text-align:left;overflow-wrap:anywhere}

@@ -22,6 +22,13 @@
   <section class="review" aria-label="Revisão da partida">
     <div class="intro"><div class="caption">ANÁLISE DE PARTIDA</div><h1>Revisão da partida</h1><p id="game"></p></div>
     <div class="actions"><button id="analyze" class="primary">Analisar partida</button><progress id="progress" hidden></progress><p id="status" role="status"></p></div>
+    <section id="report" class="report" aria-labelledby="report-title" hidden>
+      <h2 id="report-title">Resumo da partida</h2>
+      <table>
+        <thead><tr><th scope="col">Classificação</th><th scope="col">Brancas</th><th scope="col">Pretas</th></tr></thead>
+        <tbody id="report-counts"></tbody>
+      </table>
+    </section>
     <div class="detail" id="detail" aria-live="polite"></div>
     <div class="moves-title"><strong>Lances</strong><button id="critical">Próximo erro</button></div>
     <div id="moves" class="moves" aria-label="Lista de lances"></div>
